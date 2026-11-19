@@ -13,4 +13,5 @@ sample02 valid
 sample03 valid
 sample04 valid
 sample05 valid
+edge_dscp_ecn.bin valid
 bad01 invalid
