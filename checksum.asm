@@ -40,29 +40,29 @@ segment .text
         global  _ip_checksum
 _ip_checksum:
         enter   0,0
-        pusha
+        push    esi                     ; the only callee-saved register used
+        mov     esi, [ebp+8]            ; hdr
+        mov     ecx, [ebp+12]           ; len, always even
+        xor     edx, edx                ; 32-bit sum, so carries out of bit 15 are kept
 
-        ;
-        ; TODO: the checksum loop.
-        ;
-        ; The manual's recipe:
-        ;
-        ;   1. Treat the header as 16-bit big-endian words. Load each byte
-        ;      pair and recombine. Never load the pair as a single 16-bit
-        ;      value, which gives you the bytes reversed.
-        ;   2. Add each word to a 32-bit accumulator. Keep the carries. The
-        ;      fold below returns them to the sum.
-        ;   3. While the accumulator exceeds 16 bits, add its high half to
-        ;      its low half. This is the end-around carry. A large sum can
-        ;      need the fold twice.
-        ;   4. NOT the low 16 bits. That is the checksum.
-        ;
-        ; len is always even, since the driver calls this with 20. A loop
-        ; that consumes two bytes per iteration and stops on ecx == 0 is
-        ; enough. Leave the answer in ax when you return.
-        ;
+.sum:   jecxz   .done
+        movzx   eax, byte [esi]         ; high byte first: network order, not x86 order
+        shl     eax, 8
+        mov     al, [esi+1]             ; low byte drops into the zeroed bottom 8 bits
+        add     edx, eax
+        add     esi, 2
+        sub     ecx, 2
+        jmp     .sum
 
-        popa
-        mov     eax, 0
+.done:  mov     eax, edx
+        shr     eax, 16                 ; carries above bit 15
+        jz      .out
+        movzx   edx, dx                 ; keep the low half
+        add     edx, eax                ; end-around carry; can carry again, so loop
+        jmp     .done
+
+.out:   mov     eax, edx
+        not     ax                      ; one's complement; driver reads ax
+        pop     esi
         leave
         ret
