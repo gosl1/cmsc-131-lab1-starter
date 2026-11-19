@@ -55,6 +55,13 @@ _ip_checksum:
         jmp     .sum
 
 .done:  mov     eax, edx
+        shr     eax, 16                 ; carries above bit 15
+        jz      .out
+        movzx   edx, dx                 ; keep the low half
+        add     edx, eax                ; end-around carry; can carry again, so loop
+        jmp     .done
+
+.out:   mov     eax, edx
         not     ax                      ; one's complement; driver reads ax
         pop     esi
         leave
