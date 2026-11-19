@@ -14,3 +14,4 @@ sample03 valid
 sample04 valid
 sample05 valid
 bad01 invalid
+ck_fold_twice valid
