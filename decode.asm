@@ -62,6 +62,148 @@ _decode_header:
         ; the struct, and driver.c does the rest.
         ;
 
+        ; Arguments:
+        ; [EBP+8]  = hdr
+        ; [EBP+12] = out
+
+        mov     esi, [ebp+12]          ; output struct
+        mov     edi, [ebp+8]           ; IPv4 header
+
+        ; -----------------------------------------
+        ; Version and IHL (byte 0)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi]
+
+        mov     ebx, eax
+        shr     eax, 4
+        mov     [esi], eax             ; version
+
+        mov     eax, ebx
+        and     eax, 0x0F
+        mov     [esi+4], eax           ; IHL
+
+        ; -----------------------------------------
+        ; DSCP and ECN (byte 1)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+1]
+
+        mov     ebx, eax
+        shr     eax, 2
+        and     eax, 0x3F
+        mov     [esi+8], eax           ; DSCP
+
+        mov     eax, ebx
+        and     eax, 0x03
+        mov     [esi+12], eax          ; ECN
+
+        ; -----------------------------------------
+        ; Total Length (bytes 2-3)
+        ; Big-endian: byte 2 is the high byte.
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+2]
+        shl     eax, 8
+
+        movzx   ebx, byte [edi+3]
+        or      eax, ebx
+
+        mov     [esi+16], eax
+
+        ; -----------------------------------------
+        ; Identification (bytes 4-5)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+4]
+        shl     eax, 8
+
+        movzx   ebx, byte [edi+5]
+        or      eax, ebx
+
+        mov     [esi+20], eax
+
+        ; -----------------------------------------
+        ; Flags and Fragment Offset (bytes 6-7)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+6]
+        shl     eax, 8
+
+        movzx   ebx, byte [edi+7]
+        or      eax, ebx
+
+        ; Lower 13 bits = fragment offset.
+        mov     ebx, eax
+        and     ebx, 0x1FFF
+        mov     [esi+28], ebx
+
+        ; Upper 3 bits = flags.
+        shr     eax, 13
+        and     eax, 0x07
+        mov     [esi+24], eax
+
+        ; -----------------------------------------
+        ; TTL (byte 8)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+8]
+        mov     [esi+32], eax
+
+        ; -----------------------------------------
+        ; Protocol (byte 9)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+9]
+        mov     [esi+36], eax
+
+        ; -----------------------------------------
+        ; Header Checksum (bytes 10-11)
+        ; -----------------------------------------
+
+        movzx   eax, byte [edi+10]
+        shl     eax, 8
+
+        movzx   ebx, byte [edi+11]
+        or      eax, ebx
+
+        mov     [esi+40], eax
+
+        ; -----------------------------------------
+        ; Source Address (bytes 12-15)
+        ; -----------------------------------------
+
+        mov     al, [edi+12]
+        mov     [esi+44], al
+
+        mov     al, [edi+13]
+        mov     [esi+45], al
+
+        mov     al, [edi+14]
+        mov     [esi+46], al
+
+        mov     al, [edi+15]
+        mov     [esi+47], al
+
+        ; -----------------------------------------
+        ; Destination Address (bytes 16-19)
+        ; -----------------------------------------
+
+        mov     al, [edi+16]
+        mov     [esi+48], al
+
+        mov     al, [edi+17]
+        mov     [esi+49], al
+
+        mov     al, [edi+18]
+        mov     [esi+50], al
+
+        mov     al, [edi+19]
+        mov     [esi+51], al
+
+        ; -----------------------------------------
+        ; Restore registers and return.
+        ; -----------------------------------------;
         popa
         mov     eax, 0
         leave
