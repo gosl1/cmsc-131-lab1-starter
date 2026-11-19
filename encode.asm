@@ -1,40 +1,8 @@
+
 ;
 ; encode.asm - build a 20-byte IPv4 header from the field struct.
 ;
-; This is your starting point. It assembles and links as-is, so the build
-; works before you write any code. Right now it writes nothing, so the
-; twenty bytes driver.c saves are whatever the buffer held. Your job is to
-; replace that with the construction described below.
-;
-; The contract, from driver.c:
-;
-;       unsigned char *hdr        [ebp+12]
-;       struct ipv4_fields *in    [ebp+8]
-;
-; driver.c documents the struct layout:
-;
-;   +0 version   +4 ihl    +8 dscp   +12 ecn   +16 total_length
-;   +20 identification    +24 flags  +28 fragment_offset
-;   +32 ttl      +36 protocol       +40 checksum
-;   +44 src[0..3]                   +48 dst[0..3]
-;
-; You write twenty bytes into hdr. Every multi-byte field goes out
-; big-endian: the high byte first. The fragment offset's top five bits share
-; byte 6 with the three flag bits. Its bottom eight bits are byte 7.
-;
-; The checksum is your job too. Bytes 10-11 must read as zero while the
-; checksum is computed. Write them as zero, call ip_checksum over the
-; finished header, and store its result into the field. The struct's
-; checksum member is read on the decode path only. Don't copy it here.
-;
-; Do not clobber ebx, esi, edi, or ebp. C assumes they survive your call.
-; Return in eax (driver.c ignores it here, so returning 0 is fine).
-;
 
-; Windows C puts a leading underscore on every exported name. Linux C does
-; not. The Makefile passes -d ELF_TYPE on Linux. This block then respells
-; the names below to match. asm_io.inc does the same for _asm_main in the
-; bootcamp blocks. Leave this block alone.
 %ifdef ELF_TYPE
   %define _ip_checksum ip_checksum
   %define _encode_header encode_header
@@ -44,29 +12,162 @@
 extern _ip_checksum
 
 segment .text
-        global  _encode_header
+global _encode_header
+
 _encode_header:
-        enter   0,0
-        pusha
+    enter   0,0
+    pusha
 
-        ;
-        ; TODO: build the header from the struct.
-        ;
-        ; This is the reverse of decode. Mask each field to its width,
-        ; shift it up to where it lives, or the pieces of a shared byte
-        ; together, then store the byte. The fields that do not straddle
-        ; anything are one store each.
-        ;
-        ; The checksum comes last, after every other byte is written. Write
-        ; bytes 10-11 as zero, call ip_checksum with the header and 20, and
-        ; store its result (in ax) into the field big-endian. Computing it
-        ; before the rest of the header is in place sums whatever garbage
-        ; was in the buffer. ip_checksum preserves ebx, esi, edi, and ebp,
-        ; so a pointer kept in one of those survives the call. eax, ecx, and
-        ; edx do not.
-        ;
+    ; Arguments:
+    ; [EBP+8]  = in
+    ; [EBP+12] = hdr
 
-        popa
-        mov     eax, 0
-        leave
-        ret
+    mov     esi, [ebp+8]
+    mov     edi, [ebp+12]
+
+    ; ------------------------------------------------
+    ; Byte 0: Version (4 bits) | IHL (4 bits)
+    ; ------------------------------------------------
+
+    mov     eax, [esi]
+    and     eax, 0x0F
+    shl     eax, 4
+
+    mov     ebx, [esi+4]
+    and     ebx, 0x0F
+
+    or      eax, ebx
+    mov     [edi], al
+
+    ; ------------------------------------------------
+    ; Byte 1: DSCP (6 bits) | ECN (2 bits)
+    ; ------------------------------------------------
+
+    mov     eax, [esi+8]
+    and     eax, 0x3F
+    shl     eax, 2
+
+    mov     ebx, [esi+12]
+    and     ebx, 0x03
+
+    or      eax, ebx
+    mov     [edi+1], al
+
+        ; ------------------------------------------------
+    ; Bytes 2-3: Total Length (16-bit big-endian)
+    ; ------------------------------------------------
+
+    mov     eax, [esi+16]
+    mov     ebx, eax
+
+    shr     eax, 8
+    mov     [edi+2], al
+
+    mov     [edi+3], bl
+
+    ; ------------------------------------------------
+    ; Bytes 4-5: Identification (16-bit big-endian)
+    ; ------------------------------------------------
+
+    mov     eax, [esi+20]
+    mov     ebx, eax
+
+    shr     eax, 8
+    mov     [edi+4], al
+
+    mov     [edi+5], bl
+
+        ; ------------------------------------------------
+    ; Bytes 6-7: Flags (3 bits) | Fragment Offset (13 bits)
+    ; ------------------------------------------------
+
+    mov     eax, [esi+24]
+    and     eax, 0x07
+    shl     eax, 13
+
+    mov     ebx, [esi+28]
+    and     ebx, 0x1FFF
+
+    or      eax, ebx
+
+    ; Write the resulting 16-bit word in big-endian order.
+    mov     ebx, eax
+
+    shr     eax, 8
+    mov     [edi+6], al
+
+    mov     [edi+7], bl
+
+    ; ------------------------------------------------
+    ; Bytes 8-9: TTL and Protocol
+    ; ------------------------------------------------
+
+    mov     eax, [esi+32]
+    mov     [edi+8], al
+
+    mov     eax, [esi+36]
+    mov     [edi+9], al
+
+    ; ------------------------------------------------
+    ; Bytes 10-11: Checksum (initially zero)
+    ; ------------------------------------------------
+
+    mov     word [edi+10], 0
+
+    ; ------------------------------------------------
+    ; Bytes 12-15: Source Address
+    ; ------------------------------------------------
+
+    mov     al, [esi+44]
+    mov     [edi+12], al
+
+    mov     al, [esi+45]
+    mov     [edi+13], al
+
+    mov     al, [esi+46]
+    mov     [edi+14], al
+
+    mov     al, [esi+47]
+    mov     [edi+15], al
+
+    ; ------------------------------------------------
+    ; Bytes 16-19: Destination Address
+    ; ------------------------------------------------
+
+    mov     al, [esi+48]
+    mov     [edi+16], al
+
+    mov     al, [esi+49]
+    mov     [edi+17], al
+
+    mov     al, [esi+50]
+    mov     [edi+18], al
+
+    mov     al, [esi+51]
+    mov     [edi+19], al
+
+    ; ------------------------------------------------
+    ; Calculate checksum over all 20 bytes.
+    ; ip_checksum(hdr, 20)
+    ; ------------------------------------------------
+
+    push    dword 20
+    push    dword edi
+    call    _ip_checksum
+    add     esp, 8
+
+    ; AX contains the checksum in host byte order.
+    ; Store high byte first, then low byte.
+
+    mov     [edi+10], ah
+    mov     [edi+11], al
+
+    ; ------------------------------------------------
+    ; Return 0 and restore registers.
+    ; ------------------------------------------------
+
+    popa
+    mov     eax, 0
+
+    leave
+    ret
