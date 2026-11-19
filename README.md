@@ -101,13 +101,35 @@ Keep each part short. Update it when the plan changes.
 
 ### Problem analysis
 
-What the tool must read, what it must write, and which field is the hard
-one. State the header layout in your own words.
+**Decode subsystem (`decode.asm`)**
+The decode routine reads a 20-byte IPv4 base header and extracts its 13 fields into the ipv4_fields structure provided by the C driver. Since IPv4 stores multi-byte fields in network byte order (big-endian), these values must be reconstructed correctly when reading the header bytes.
+
+Some fields share a byte, such as Version and IHL in the first byte, and DSCP and ECN in the second byte. The Flags and Fragment Offset fields also share two bytes, requiring bit shifting and masking to extract them separately.
+
 
 ### Solution architecture
 
-How the three routines split the work. Which registers each routine uses,
-and how the struct offsets in `driver.c` map to the fields.
+**Decode subsystem (`decode.asm`)**
+The decode routine is implemented in decode.asm and follows the 32-bit cdecl calling convention. It receives two arguments: a pointer to the 20-byte header and a pointer to the output structure.
+
+It extracts each field using byte access, bitwise operations, and shifts. Multi-byte fields are reconstructed in big-endian order by combining their bytes. Fields occupying only part of a byte are isolated using shifts and masks.
+
+The extracted values are stored at their corresponding offsets in the output structure:
+
+Offsets 0–12: Version, IHL, DSCP, and ECN.
+
+Offsets 16–28: Total Length, Identification, Flags, and Fragment Offset.
+
+Offsets 32–40: TTL, Protocol, and Header Checksum.
+
+Offsets 44–47: Source Address.
+
+Offsets 48–51: Destination Address.
+
+The routine uses pusha and popa to preserve general-purpose registers, follows the stack frame established with enter and leave, and returns with the stack balanced.
+
+The decode implementation was completed and tested against the provided IPv4 header fixtures. An additional fixture, edge_dscp_ecn.bin, was added to exercise the extraction of mixed DSCP and ECN values and verify that the two fields are correctly separated from the same byte.
+
 
 ### Timeline
 
